@@ -5,23 +5,23 @@
 ```
 
 {abbr}`ZFS (Zettabyte file system)` combines both physical volume management and a file system.
-A ZFS installation can span across a series of storage devices and is very scalable, allowing you to add disks to expand the available space in the storage pool immediately.
+A ZFS installation can span across a series of logical storage devices and is very scalable, allowing you to add disks to expand the available space in the storage pool immediately.
 
 ZFS is a block-based file system that protects against data corruption by using checksums to verify, confirm and correct every operation.
 To run at a sufficient speed, this mechanism requires a powerful environment with a lot of RAM.
 
 In addition, ZFS offers snapshots and replication, RAID management, copy-on-write clones, compression and other features.
 
-To use ZFS, make sure you have `zfsutils-linux` installed on your machine.
+To use ZFS on Ubuntu, make sure you have `zfsutils-linux` installed on your machine. Tha package names might differ on other distributions.
 
 ## Terminology
 
-ZFS creates logical units based on physical storage devices.
-These logical units are called *ZFS pools* or *zpools*.
+ZFS creates logical units based on physical storage devices, disk partitions, and even loop-mounted files; basically any block device. These logical units are referred to as *VDEVs*. Typically VDEVs are groups of phyical disks: paires of disks configured as a mirror, or in sets resembling RAID5 (raid-z1), RAID6 (raid-z2), and so on. Protection against disk failure is entirely encapsulate in indivual VDEVs, which, once created, cannot be altered.
+Sets of VDEVs are then combined to create *ZFS pools* or *zpools*, which are the fundamental unit of storage in ZFS. When written, data is striped across all the VDEVs in a zpool. While VDEVs themselves can't be alterer once created, one can always add additional VDEVs to a pool in order to increase the available storage in that pool.
 Each zpool is then divided into a number of *{spellexception}`datasets`*.
 These {spellexception}`datasets` can be of different types:
 
-- A *{spellexception}`ZFS filesystem`* can be seen as a partition or a mounted file system.
+- A *{spellexception}`ZFS filesystem`* can be seen as equivalent to a partition or a mounted file system.
 - A *ZFS volume* represents a block device.
 - A *ZFS snapshot* captures a specific state of either a {spellexception}`ZFS filesystem` or a ZFS volume.
   ZFS snapshots are read-only.
@@ -29,13 +29,13 @@ These {spellexception}`datasets` can be of different types:
 
 ## `zfs` driver in LXD
 
-The `zfs` driver in LXD uses {spellexception}`ZFS filesystems` and ZFS volumes for images and custom storage volumes, and ZFS snapshots and clones to create instances from images and for instance and custom volume snapshots.
+The `zfs` driver in LXD uses {spellexception}`ZFS filesystems` and ZFS volumes for images and custom storage volumes, and ZFS snapshots and clones to create instances from images and for instance and custom volume snapshots. When you spin up multiple containers based on the same image, LXD first creates a snapshot of the original image, and then uses ZFS clones of this snapshot for each container instance.
 By default, LXD enables compression when creating a ZFS pool.
 
 LXD assumes that it has full control over the ZFS pool and {spellexception}`dataset`.
 Therefore, you should never maintain any {spellexception}`datasets` or file system entities that are not owned by LXD in a ZFS pool or {spellexception}`dataset`, because LXD might delete them.
 
-Due to the way copy-on-write works in ZFS, parent {spellexception}`ZFS filesystems` can't be removed until all children are gone.
+Due to the way copy-on-write works in ZFS, parent {spellexception}`ZFS filesystems` can't be removed until all children are gone. In particular, when you spin up containers based on an image, both the original image and the snapshot of it used to make the clone cannot be deleted as long as any of the containers based on this image exist (in ZFS parlance, you can think of containers as *children of the snapshot of the original OS image*.
 As a result, LXD automatically renames any objects that are removed but still referenced.
 Such objects are kept at a random `deleted/` path until all references are gone and the object can safely be removed.
 Note that this method might have ramifications for restoring snapshots.
@@ -50,7 +50,6 @@ Then use the following commands to make sure that trimming is automatically enab
     zpool set autotrim=on ZPOOL-NAME
     zpool trim ZPOOL-NAME
 
-(storage-zfs-limitations)=
 ### Limitations
 
 The `zfs` driver has the following limitations:
@@ -61,7 +60,7 @@ Delegating part of a pool
 
 Restoring from older snapshots
 : ZFS doesn't support restoring from snapshots other than the latest one.
-  You can, however, create new instances from older snapshots.
+  You can, however, create new instances from older snapshots by cloning them.
   This method makes it possible to confirm whether a specific snapshot contains what you need.
   After determining the correct snapshot, you can {ref}`remove the newer snapshots <storage-edit-snapshots>` so that the snapshot you need is the latest one and you can restore it.
 
